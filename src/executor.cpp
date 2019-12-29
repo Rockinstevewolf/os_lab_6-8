@@ -14,25 +14,26 @@ using namespace chrono;
 string address = "tcp://localhost:";
 
 typedef struct Message{ //структура для общения узлов
-	int request;	//основной запрос
+	int command;	//основной запрос
 	int period;
 	int amount;
 	pid_t id;	//id процесса
 } Message;
 
-void Get_request(zmq_msg_t request, void* controller, Message data){
-	zmq_msg_init_size(&request, sizeof(Message));
-	memcpy(zmq_msg_data(&request), &data, sizeof(Message));
-	zmq_msg_send(&request, controller, 0);
+/*
+Message* Get_request(zmq_msg_t request, void* controller){
+	zmq_msg_init(&request);
+	zmq_msg_recv(&request, controller, 0);
+	Message *m_back = (Message *) zmq_msg_data(&request); 
 	zmq_msg_close(&request);
-}
+	return m_back;
+}*/
 
-Message* Do_reply(zmq_msg_t reply, void* controller, Message *back){
-	zmq_msg_init(&reply);
-	zmq_msg_recv(&reply, controller, 0);
-	back = (Message *) zmq_msg_data(&reply); 
+void Do_reply(zmq_msg_t reply, void* controller, Message m_send){
+	zmq_msg_init_size(&reply, sizeof(Message));
+	memcpy(zmq_msg_data(&reply), &reply, sizeof(Message));
+	zmq_msg_send(&reply, controller, 0);
 	zmq_msg_close(&reply);
-	return back;
 }
 
 int main (int argc, char const *argv[]) 
@@ -48,64 +49,66 @@ int main (int argc, char const *argv[])
 	if(zmq_connect(controller, address.c_str()) == 0){
 		cout << "Connecting to " << address.c_str() << endl;
 	}
-	pid_t id = getpid();
 	zmq_msg_t request, reply;
-	Message *Get;
+	Message *m_back, m_send;
 
-	cout << "my id is " << id << endl;
-	zmq_msg_init_size(&reply, sizeof(pid_t));
-	memcpy(zmq_msg_data(&reply), &id, sizeof(pid_t));
+	m_send.id = getpid();
+
+	cout << "my id is " << m_send.id << endl;
+
+	zmq_msg_init_size(&reply, sizeof(Message));
+	memcpy(zmq_msg_data(&reply), &m_send, sizeof(Message));
 	zmq_msg_send(&reply, controller, 0);
 	zmq_msg_close(&reply);
+
 	cout << "No problems detected" << endl;
 
 	bool working = true;
 	bool send = false;
 	while(working)
 	{
+		cout << "---request--waiting---" << endl;
+
 		zmq_msg_init(&request);
 		zmq_msg_recv(&request, controller, 0);
-		Get = (Message *)zmq_msg_data(&request);
+		m_back = (Message *) zmq_msg_data(&request); 
 		zmq_msg_close(&request);
 
-		cout << "--> " << Get->request << endl;
+		cout << "--> " << m_back->command << endl;
+		if(m_back->command == 1){
+			cout << "heartbeat " << m_back->period << " " << m_back->amount << endl;
+			int n = m_back->amount;
+			for(int i=0; i < n; i++){
 
-		if(Get->request == 1){
-			int n = Get->amount;
-			bool tell = true;
-			for(int i=0; i<n; i++){
+				zmq_msg_init_size(&reply, sizeof(Message));
+				memcpy(zmq_msg_data(&reply), &reply, sizeof(Message));
+				zmq_msg_send(&reply, controller, 0);
+				zmq_msg_close(&reply);
+
 				cout << "Staying Alive" << endl;
-
-
-				sleep(Get->period);
-
-				zmq_msg_init_size(&request, sizeof(bool));
-				memcpy(zmq_msg_data(&request), &tell, sizeof(bool));
-				zmq_msg_send(&request, controller, 0);
-				zmq_msg_close(&request);
+				sleep(m_back->period);
 
 				zmq_msg_init(&request);
 				zmq_msg_recv(&request, controller, 0);
-				Get = (Message *)zmq_msg_data(&request);
+				m_back = (Message *) zmq_msg_data(&request); 
 				zmq_msg_close(&request);
 			}
 			send = true;
 		}
-		else if(Get->request == 2){
+		else if(m_back->command == 2){
 			working = false;
 			cout << "Closing calculator..." << endl;
-			return 0;
-			send = true;
+			break;
 		}
 		else{
 			cout << "Try again..." << endl;
 		}
 		if(send){
-			zmq_msg_init_size(&request, sizeof(Message));
-			memcpy(zmq_msg_data(&request), &Get, sizeof(Message));
-			zmq_msg_send(&request, controller, 0);
-			zmq_msg_close(&request);
-
+			zmq_msg_init_size(&reply, sizeof(Message));
+			memcpy(zmq_msg_data(&reply), &reply, sizeof(Message));
+			zmq_msg_send(&reply, controller, 0);
+			zmq_msg_close(&reply);
+			send = false;
 		}
 	}
 
