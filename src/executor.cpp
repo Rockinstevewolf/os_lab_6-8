@@ -6,6 +6,7 @@
 #include <unistd.h> 
 #include <chrono>
 #include <ctime>
+#include <vector>
 #include <sys/types.h> 
 #include "zmq.h"
 using namespace std;
@@ -17,24 +18,14 @@ typedef struct Message{ //структура для общения узлов
 	int command;	//основной запрос
 	int period;
 	int amount;
-	pid_t id;	//id процесса
+	int list[100];
+	int sum;
+	pid_t id;	//pid процесса созданного calculator
 } Message;
 
-/*
-Message* Get_request(zmq_msg_t request, void* controller){
-	zmq_msg_init(&request);
-	zmq_msg_recv(&request, controller, 0);
-	Message *m_back = (Message *) zmq_msg_data(&request); 
-	zmq_msg_close(&request);
-	return m_back;
-}*/
 
-void Do_reply(zmq_msg_t reply, void* controller, Message m_send){
-	zmq_msg_init_size(&reply, sizeof(Message));
-	memcpy(zmq_msg_data(&reply), &reply, sizeof(Message));
-	zmq_msg_send(&reply, controller, 0);
-	zmq_msg_close(&reply);
-}
+Message m_null = {0,0,0,0,0,0};
+
 
 int main (int argc, char const *argv[]) 
 {
@@ -75,18 +66,31 @@ int main (int argc, char const *argv[])
 		zmq_msg_close(&request);
 
 		cout << "--> " << m_back->command << endl;
-		if(m_back->command == 1){
+		m_send.id = getpid();
+		if(m_back->command == 0){
+			m_send.sum = 0;
+			int n = m_back->amount;
+			cout << "exec " << n << " ";
+			for(int i = 0; i < n; i++){
+				cout << m_back->list[i] << " ";
+				m_send.sum = m_send.sum + m_back->list[i];
+			}
+			cout << endl;
+			send = true;
+		}
+		else if(m_back->command == 1){
 			cout << "heartbeat " << m_back->period << " " << m_back->amount << endl;
 			int n = m_back->amount;
+			int per = m_back->period;
 			for(int i=0; i < n; i++){
 
 				zmq_msg_init_size(&reply, sizeof(Message));
-				memcpy(zmq_msg_data(&reply), &reply, sizeof(Message));
+				memcpy(zmq_msg_data(&reply), &m_send, sizeof(Message));
 				zmq_msg_send(&reply, controller, 0);
 				zmq_msg_close(&reply);
 
 				cout << "Staying Alive" << endl;
-				sleep(m_back->period);
+				sleep(per);
 
 				zmq_msg_init(&request);
 				zmq_msg_recv(&request, controller, 0);
@@ -105,7 +109,7 @@ int main (int argc, char const *argv[])
 		}
 		if(send){
 			zmq_msg_init_size(&reply, sizeof(Message));
-			memcpy(zmq_msg_data(&reply), &reply, sizeof(Message));
+			memcpy(zmq_msg_data(&reply), &m_send, sizeof(Message));
 			zmq_msg_send(&reply, controller, 0);
 			zmq_msg_close(&reply);
 			send = false;

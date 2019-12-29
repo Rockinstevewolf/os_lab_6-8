@@ -10,35 +10,24 @@ typedef struct Message{ //структура для общения узлов
 	int command;	//основной запрос
 	int period;
 	int amount;
+	int list[100];
+	int sum;
 	pid_t id;	//pid процесса созданного calculator
 } Message;
 
-Message m_null = {0,0,0,0};
+Message m_null = {0,0,0,0,0,0};
 
 string address = "tcp://*:";
 
 void print_menu(){
-	cout << "------------------------------" << endl
+	cout << "------------------------------------" << endl
+		 << "-	exec [amount] [a, b, c, d, ...]" << endl
 		 << "-	heartbeat [time] [amount]" << endl
 		 << "-	menu" << endl
 		 << "-	q" << endl
-		 << "------------------------------" << endl;
+		 << "------------------------------------" << endl;
 }
 
-void Do_request(zmq_msg_t request, void* executor, Message m_send){
-	zmq_msg_init_size(&request, sizeof(Message));
-	memcpy(zmq_msg_data(&request), &m_send, sizeof(Message));
-	zmq_msg_send(&request, executor, 0);
-	zmq_msg_close(&request);
-}
-/*
-Message *Get_reply(zmq_msg_t reply, void* executor){
-	zmq_msg_init(&reply);
-	zmq_msg_recv(&reply, executor, 0);
-	Message *m_back = (Message *) zmq_msg_data(&reply); 
-	zmq_msg_close(&reply);
-	return m_back;
-}*/
 
 int main (int argc, char const *argv[]) 
 {
@@ -51,8 +40,9 @@ int main (int argc, char const *argv[])
 	zmq_msg_t request, reply;
 	Message m_send, *m_back;
 	string choice;
+	int el;
 	bool working = true, send = false;
-	bool heartbeat = false, quit = false;
+	bool heartbeat = false, quit = false, exec = false;
 
 	address += argv[1];
 	zmq_bind(executor, address.c_str());
@@ -67,12 +57,22 @@ int main (int argc, char const *argv[])
 	cout << "Connected id: " << id << endl;
 	system("cat connected.txt");
 	print_menu();
+	m_send = m_null;
 	while(working)
 	{
 		cout << "> ";
 		cin >> choice;
-
-		if(choice == "heartbeat"){
+		if(choice == "exec"){
+			m_send.command = 0;
+			cin >> m_send.amount;
+			for(int i = 0; i < m_send.amount; i++){
+				cin >> m_send.list[i];
+				//cout << m_send.list[i] << endl;
+			}
+			send = true;
+			exec = true;
+		}
+		else if(choice == "heartbeat"){
 			m_send.command = 1;
 			cin >> m_send.period;
 			cin >> m_send.amount;
@@ -92,11 +92,17 @@ int main (int argc, char const *argv[])
 			cout << "Try again..." << endl;
 		}
 		if(send){
+			zmq_msg_init_size(&request, sizeof(Message));
+			memcpy(zmq_msg_data(&request), &m_send, sizeof(Message));
+			zmq_msg_send(&request, executor, 0);
+			zmq_msg_close(&request);
+
+			if(quit){
+				cout << "Closing controller..." << endl;
+				break;
+			}
+
 			if(heartbeat){
-				zmq_msg_init_size(&request, sizeof(Message));
-				memcpy(zmq_msg_data(&request), &m_send, sizeof(Message));
-				zmq_msg_send(&request, executor, 0);
-				zmq_msg_close(&request);
 				for(int i = 0; i < m_send.amount; i++){
 
 					zmq_msg_init(&reply);
@@ -112,24 +118,18 @@ int main (int argc, char const *argv[])
 					zmq_msg_close(&request);
 				}
 				heartbeat = false;
-				m_send = m_null;
-			}
-			//else if()
-			else if(quit){
-
-				zmq_msg_init_size(&request, sizeof(Message));
-				memcpy(zmq_msg_data(&request), &m_send, sizeof(Message));
-				zmq_msg_send(&request, executor, 0);
-				zmq_msg_close(&request);
-
-				cout << "Closing controller..." << endl;
-				break;
 			}
 
 			zmq_msg_init(&reply);
 			zmq_msg_recv(&reply, executor, 0);
 			m_back = (Message *) zmq_msg_data(&reply); 
 			zmq_msg_close(&reply);
+
+			if(exec){
+				cout << "Ok: " << m_back->sum << endl;
+				exec = false;
+			}
+			m_send = m_null;
 
 			send = false;
 		}
