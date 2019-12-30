@@ -1,8 +1,8 @@
-# OS_lab_
-## Variant 0_: SmthSmthSmth.
+# OS_lab_6-8
+## Variant 16: exec sum, heartbeat, quit.
 ### (RUS) Здесь могла бы быть ваша реклама.
 in bash:
 - "cmake cmakelists.txt"
 - "make"
-- "./executable"
+- "./controller" then "./executor"
 - enjoy
