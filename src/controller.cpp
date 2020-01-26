@@ -7,22 +7,25 @@
 using namespace std;
 
 typedef struct Message{ //структура для общения узлов
+	int status;
 	int command;	//основной запрос
 	int period;
 	int amount;
 	int list[100];
 	int sum;
-	pid_t id;	//pid процесса созданного calculator
+	pid_t pid;	//pid процесса созданного calculator
+	int id;
 } Message;
 
-Message m_null = {0,0,0,0,0,0};
+Message m_null = {0,0,0,0,0,0,0};
 
 string address = "tcp://*:";
 
 void print_menu(){
 	cout << "------------------------------------" << endl
-		 << "-	exec [amount] [a, b, c, d, ...]" << endl
-		 << "-	heartbeat [time] [amount]" << endl
+		 << "-	create [id]" << endl
+		 << "-	exec [id] [amount] [a, b, c, d, ...]" << endl
+		 << "-	heartbeat [id] [time] [amount]" << endl
 		 << "-	menu" << endl
 		 << "-	q" << endl
 		 << "------------------------------------" << endl;
@@ -32,7 +35,7 @@ void print_menu(){
 int main (int argc, char const *argv[]) 
 {
 	if(argc != 2){
-		cout<<"Wrong input...\nyou should write "<<endl;
+		cout<<"Wrong input...\nyou have to write port"<<endl;
 		return 1;
 	}
 	void* context = zmq_ctx_new();
@@ -41,43 +44,90 @@ int main (int argc, char const *argv[])
 	Message m_send, *m_back;
 	string choice;
 	int el;
+	vector <int> ids;
+	int cid;
+
 	bool working = true, send = false;
-	bool heartbeat = false, quit = false, exec = false;
+	bool heartbeat = false, quit = false, exec = false, create = false;
 
 	address += argv[1];
 	zmq_bind(executor, address.c_str());
-	//system("cat doge.txt");
 	cout << "Starting with address " << address.c_str() << endl;
 
 	zmq_msg_init(&reply);
 	zmq_msg_recv(&reply, executor, 0);
 	m_back = (Message *) zmq_msg_data(&reply); 
 	zmq_msg_close(&reply);
-	pid_t id = m_back->id;
-	cout << "Connected id: " << id << endl;
-	system("cat connected.txt");
+	int mid = m_back->id;
+	cout << "Connected id: " << mid << endl;
+	//system("cat connected.txt");
+	ids.push_back(mid);
 	print_menu();
 	m_send = m_null;
 	while(working)
 	{
 		cout << "> ";
 		cin >> choice;
-		if(choice == "exec"){
-			m_send.command = 0;
-			cin >> m_send.amount;
-			for(int i = 0; i < m_send.amount; i++){
-				cin >> m_send.list[i];
-				//cout << m_send.list[i] << endl;
+		if(choice == "create"){
+			cin >> cid;
+			for(int i : ids){
+				if(cid == i){
+					create = false;
+					break;
+				}
+				else{
+					create = true;
+				}
 			}
-			send = true;
-			exec = true;
+			if(cid > 0){
+				if(create){
+					m_send.id = cid;
+					m_send.command = -1;
+					send = true;
+					create = true;
+				}
+				else{
+					cout << "Id already exists..." << endl;
+				}
+			}
+			else{
+				cout << "Wrong id input..." << endl;
+			}
+		}
+		else if(choice == "exec"){
+			cin >> cid;
+			for(int i : ids){
+				if(i == cid){
+					m_send.command = 0;
+					m_send.id = cid;
+					cin >> m_send.amount;
+					for(int i = 0; i < m_send.amount; i++){
+						cin >> m_send.list[i];
+						//cout << m_send.list[i] << endl;
+					}
+					send = true;
+					exec = true;
+				}
+			}
+			if(!exec){
+				cout << "Id does not exist..." << endl;
+			}
 		}
 		else if(choice == "heartbeat"){
-			m_send.command = 1;
-			cin >> m_send.period;
-			cin >> m_send.amount;
-			send = true;
-			heartbeat = true;
+			cin >> cid;
+			for(int i : ids){
+				if(i == cid){
+					m_send.command = 1;
+					m_send.id = cid;
+					cin >> m_send.period;
+					cin >> m_send.amount;
+					send = true;
+					heartbeat = true;
+				}
+			}
+			if(!heartbeat){
+				cout << "Id does not exist..." << endl;
+			}
 		}
 		else if(choice == "menu"){
 			print_menu();
@@ -96,11 +146,6 @@ int main (int argc, char const *argv[])
 			memcpy(zmq_msg_data(&request), &m_send, sizeof(Message));
 			zmq_msg_send(&request, executor, 0);
 			zmq_msg_close(&request);
-
-			if(quit){
-				cout << "Closing controller..." << endl;
-				break;
-			}
 
 			if(heartbeat){
 				for(int i = 0; i < m_send.amount; i++){
@@ -125,12 +170,33 @@ int main (int argc, char const *argv[])
 			m_back = (Message *) zmq_msg_data(&reply); 
 			zmq_msg_close(&reply);
 
-			if(exec){
-				cout << "Ok: " << m_back->sum << endl;
-				exec = false;
+			if(quit){
+				cout << "Closing controller..." << endl;
+				break;
 			}
-			m_send = m_null;
 
+			if(create){
+				if(m_back->status == 0){
+					cout << "Created: " << m_back->pid << endl;
+					ids.push_back(cid);
+				}
+				else{
+					cout << "Could not create node: " << m_send.id << endl;
+				}
+				create = false;
+			}
+
+			if(exec){
+				if(m_back->status == 0){
+					cout << "Ok--" << m_back->id << ": " << m_back->sum << endl;
+					exec = false;
+				}
+				else{
+					cout << "Could find node: " << m_send.id << endl;
+				}
+			}
+
+			m_send = m_null;
 			send = false;
 		}
 	}
