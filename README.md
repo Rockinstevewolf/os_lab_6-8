@@ -1,6 +1,6 @@
 # OS_lab_6-8
 ## Variant 16: exec sum, heartbeat, quit.
-### (RUS) Здесь могла бы быть ваша реклама.
+### (RUS) Создание сокет-сервера и реализация дистанционно связанных с ним взаимодействий.
 in bash:
 - "cmake cmakelists.txt"
 - "make"
